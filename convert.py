@@ -21,9 +21,17 @@ class CWL(object):
 
 class Container(CWL):
     def build(self):
-        for req in self.yaml:
+        for req in self.yaml['requirements']:
             if 'dockerPull' in req:
                 self.container = req['dockerPull']
+                return
+        for hint, req in self.yaml['hints'].items():
+            if hint != 'DockerRequirement':
+                continue
+            if 'dockerPull' in req:
+                self.container = req['dockerPull']
+                return
+
 
     def repr(self):
         return "container '{}'".format(self.container)
@@ -41,7 +49,7 @@ class Process(CWL):
         self.build_container()
 
     def build_container(self):
-        self.container = Container(self.yaml['requirements'])
+        self.container = Container(self.yaml)
 
     def build_inputs(self):
         self.inputs = []
