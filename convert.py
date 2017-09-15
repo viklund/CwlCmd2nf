@@ -118,7 +118,7 @@ class Input(CWL):
     def channel_repr(self):
         if self.type != 'File':
             return
-        return "file({}) from {}".format(self.name, self.full_name())
+        return "file {} from {}".format(self.name, self.full_name())
 
 
 class Output(CWL):
@@ -135,7 +135,7 @@ class Output(CWL):
     def channel_repr(self):
         if self.type != 'File':
             return
-        return "file('{}') into {}".format(self.output, self.full_name())
+        return "file '{}' into {}".format(self.output, self.full_name())
 
 class Command(CWL):
     def build(self):
