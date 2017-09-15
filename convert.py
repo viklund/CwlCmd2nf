@@ -2,6 +2,7 @@
 
 import argparse
 import yaml
+import os.path
 
 class CWL(object):
     def __init__(self, yaml, name=None, prefix=None):
@@ -29,7 +30,10 @@ class Container(CWL):
 
 class Process(CWL):
     def build(self):
-        self.id = self.yaml['id']
+        if 'id' in self.yaml:
+            self.id = self.yaml['id']
+        else:
+            self.id = '_'.join( os.path.basename(self.name).split('.') )
 
         self.build_inputs()
         self.build_outputs()
