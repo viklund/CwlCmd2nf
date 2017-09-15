@@ -3,95 +3,153 @@
 import argparse
 import yaml
 
+class CWL(object):
+    def __init__(self, yaml, name=None, prefix=None):
+        self.yaml = yaml
+        self.name = name
+        self.prefix = prefix
+        self.build()
 
-class Converter:
+    def full_name(self):
+        if not self.name:
+            raise NameError("No name for me")
+        if not self.prefix:
+            return self.name
+        else:
+            return "{}_{}".format(self.prefix, self.name)
+
+class Container(CWL):
+    def build(self):
+        for req in self.yaml:
+            if 'dockerPull' in req:
+                self.container = req['dockerPull']
+
+    def repr(self):
+        return "container '{}'".format(self.container)
+
+class Process(CWL):
+    def build(self):
+        self.id = self.yaml['id']
+
+        self.build_inputs()
+        self.build_outputs()
+        self.build_command()
+        self.build_container()
+
+    def build_container(self):
+        self.container = Container(self.yaml['requirements'])
+
+    def build_inputs(self):
+        self.inputs = []
+        for n, v in self.yaml['inputs'].items():
+            self.inputs.append( Input(v, name=n, prefix=self.id) )
+
+    def build_outputs(self):
+        self.outputs = []
+        for n, v in self.yaml['outputs'].items():
+            self.outputs.append( Output(v, name=n, prefix=self.id) )
+
+    def build_command(self):
+        self.command = Command(self.yaml['baseCommand'])
+
+    def repr(self):
+        repr = []
+        for input in self.inputs:
+            repr.append(input.setup_repr())
+        repr.append("process {} {{".format(self.id))
+
+        repr.append(self.container.repr())
+
+        repr.append('input:')
+        for input in self.inputs:
+            repr.append( input.channel_repr() )
+
+        repr.append('output:')
+        for output in self.outputs:
+            repr.append( output.channel_repr() )
+
+        repr.append('script:')
+        repr.append('"""')
+        repr.append( self.command_repr() )
+        repr.append('"""')
+        repr.append('}')
+        return "\n".join([r for r in repr if r])
+
+    def command_repr(self):
+        repr = self.command.repr()
+        for argument in sorted(self.inputs, key=lambda x: x.position):
+            repr += " " + argument.command_repr()
+        return repr
+
+
+
+class Input(CWL):
+    def build(self):
+        self.type = self.yaml['type']
+        if 'default' in self.yaml:
+            self.default = self.yaml['default']
+
+        if 'inputBinding' in self.yaml:
+            self.position = self.yaml['inputBinding']['position']
+        else:
+            self.position = 0
+
+    def full_name(self):
+        name = super().full_name()
+        if self.type == 'File':
+            name = "{}_{}".format('inp', name)
+        else:
+            name = "params.{}".format(name)
+        return name
+
+    def setup_repr(self):
+        if self.type == 'File':
+            return
+        repr = self.full_name()
+        if hasattr(self, 'default'):
+            repr += " = {}".format(self.default)
+        return repr
+
+    def command_repr(self):
+        return "${{{}}}".format(self.full_name())
+
+    def channel_repr(self):
+        if self.type != 'File':
+            return
+        return "file({}) from {}".format(self.name, self.full_name())
+
+
+class Output(CWL):
+    def build(self):
+        self.type = self.yaml['type']
+        self.output = self.yaml['outputBinding']['glob']
+
+    def full_name(self):
+        name = super().full_name()
+        if self.type == 'File':
+            name = "{}_{}".format('out', name)
+        return name
+
+    def channel_repr(self):
+        if self.type != 'File':
+            return
+        return "file('{}') into {}".format(self.output, self.full_name())
+
+class Command(CWL):
+    def build(self):
+        self.command = self.yaml
+
+    def repr(self):
+        return " ".join(self.command)
+
+class Converter(object):
     def convert(self, file):
         with open(file) as fh:
             contents = "".join(fh.readlines())
             data = yaml.load(contents)
 
-        self.prefix = data['id']
-
-        self.setup_params(data['inputs'])
-        self.setup_input_channels(data['inputs'])
-
-        self.setup_process(data)
-
-    def setup_input_channels(self, inputs):
-        for name, structure in inputs.items():
-            if structure['type'] != 'File':
-                continue
-            name = self._create_name(name)
-            ch_name = "inp_{}".format(name)
-            structure['nxf_name'] = name
-            structure['nxf_ch_name'] = ch_name
-
-            print("Channel.from(file(params.{})).set {{ {} }}".format(name, ch_name))
-
-    def setup_params(self, inputs):
-        for name, structure in inputs.items():
-            if structure['type'] == 'File':
-                continue
-            pname = "params.{}".format( self._create_name(name) )
-            structure['nxf_name'] = pname
-            if 'default' in structure:
-                print("{} = {}".format(pname, structure['default']))
-            else:
-                print("{}".format(pname))
-
-    def setup_process(self, data):
-        print("process {} {{".format(data['id']))
-        self.process_container(data)
-        self.process_inputs(data)
-        self.process_outputs(data)
-        self.process_script(data)
-        print("}")
-
-    def process_outputs(self, data):
-        print("    output:")
-        for name, structure in data['outputs'].items():
-            if structure['type'] != 'File':
-                continue
-            glob_pattern = structure['outputBinding']['glob']
-            ch_name = "out_{}".format(self._create_name(name))
-            print("        file('{}') into {}".format(glob_pattern, ch_name))
-
-
-    def process_inputs(self, data):
-        print("    input:")
-        for inp, structure in data['inputs'].items():
-            if structure['type'] != 'File':
-                continue
-            print("        file({}) from {}".format(structure['nxf_name'], structure['nxf_ch_name']))
-
-    def process_script(self, data):
-        print('    """')
-        print('    {}'.format( self._build_command_line(data)))
-        print('    """')
-        return
-
-    def _build_command_line(self, data):
-        command = ' '.join(data['baseCommand'])
-
-        sorted_inputs = sorted( data['inputs'].items(), key=lambda x: x[1]['inputBinding']['position'])
-        for name, structure in sorted_inputs:
-            command += ' ' + self._build_param(structure)
-        return command
-
-    def _build_param(self, structure):
-        return '"${{{}}}"'.format(structure['nxf_name'])
-
-    def process_container(self, data):
-        for req in data['requirements']:
-            if 'dockerPull' in req:
-                print("    container '{}'".format( req['dockerPull'] ))
-                return
-
-
-    def _create_name(self, name):
-        return "{}_{}".format(self.prefix, name)
-
-
+        p = Process(data)
+        print(p.repr())
 
 
 def main():
