@@ -164,6 +164,13 @@ class Input(CWL):
     def channel_repr(self):
         if self.type != 'File':
             return
+        if hasattr(self, 'secondary_files'):
+            files = [self.name]
+            files.extend([ self.name + sf for sf in self.secondary_files])
+
+            file_repr = ', '.join(["file({})".format(f) for f in files])
+
+            return "set {} from {}".format(file_repr, self.channel_name())
         return "file {} from {}".format(self.name, self.channel_name())
 
 
