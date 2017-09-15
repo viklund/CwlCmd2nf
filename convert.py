@@ -159,6 +159,8 @@ class Input(CWL):
             arg_name = self.arg_name + ' '
         if self.type == 'File':
             return "{}${{{}}}".format(arg_name, self.name)
+        if self.type == 'boolean':
+            return arg_name
         return "{}${{{}}}".format(arg_name, self.param_name())
 
     def channel_repr(self):
