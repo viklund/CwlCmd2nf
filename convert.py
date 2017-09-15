@@ -91,6 +91,7 @@ class Input(CWL):
 
         if 'inputBinding' in self.yaml:
             self.position = self.yaml['inputBinding']['position']
+            self.arg_name = self.yaml['inputBinding'].get('prefix', '')
         else:
             self.position = 0
 
@@ -111,9 +112,12 @@ class Input(CWL):
         return repr
 
     def command_repr(self):
+        arg_name = ''
+        if self.arg_name:
+            arg_name = self.arg_name + ' '
         if self.type == 'File':
-            return "${{{}}}".format(self.name)
-        return "${{{}}}".format(self.full_name())
+            return "{}${{{}}}".format(arg_name, self.name)
+        return "{}${{{}}}".format(arg_name, self.full_name())
 
     def channel_repr(self):
         if self.type != 'File':
