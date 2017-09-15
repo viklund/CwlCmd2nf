@@ -1,8 +1,8 @@
 params.mem_gb=4
 params.bam_input='rna.SRR94877*.bam'
-mem=params.mem_gb
-bam=Channel.fromPath(params.bam_input)
-bam.map { it -> [mem, it] }
+mem_gb=params.mem_gb
+bam_input=Channel.fromPath(params.bam_input)
+bam_input.map { it -> [mem, it] }
 .view()
 .set {input_ch}
 
