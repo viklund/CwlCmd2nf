@@ -166,7 +166,10 @@ class Input(CWL):
             return
         if hasattr(self, 'secondary_files'):
             files = [self.name]
-            files.extend([ self.name + sf for sf in self.secondary_files])
+            for sf in self.secondary_files:
+                if sf[0] == '.':
+                    sf = '_' + sf[1:]
+                files.append( self.name + sf )
 
             file_repr = ', '.join(["file({})".format(f) for f in files])
 
