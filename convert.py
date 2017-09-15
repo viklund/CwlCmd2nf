@@ -65,7 +65,7 @@ class Process(CWL):
         self.command = Command(self.yaml['baseCommand'])
 
     def repr(self):
-        repr = []
+        repr = Representation()
         for input in self.inputs:
             if input.type == 'File':
                 continue
@@ -82,21 +82,30 @@ if (!{}) {{
             else:
                 repr.append(input.setup_repr())
         repr.append("process {} {{".format(self.id))
+        repr.inc_indent()
 
         repr.append(self.container.repr())
 
         repr.append('input:')
+        repr.inc_indent()
         for input in self.inputs:
             repr.append( input.channel_repr() )
+        repr.dec_indent()
 
         repr.append('output:')
+        repr.inc_indent()
         for output in self.outputs:
             repr.append( output.channel_repr() )
+        repr.dec_indent()
 
         repr.append('script:')
+        repr.inc_indent()
         repr.append( self.build_script_string() )
+
+        repr.dec_indent()
+        repr.dec_indent()
         repr.append('}')
-        return "\n".join([r for r in repr if r])
+        return repr.repr()
 
     def build_script_string(self):
         script = []
@@ -110,6 +119,27 @@ if (!{}) {{
             else:
                 script.append( " '{}'".format( argument.command_repr()) )
         return " + ".join(script)
+
+
+class Representation(object):
+    def __init__(self):
+        self.indent = 0
+        self._repr = []
+
+    def append(self, str):
+        if str:
+            self._repr.append( "{}{}".format(' ' * self.indent, str))
+
+    def inc_indent(self):
+        self.indent += 4
+
+    def dec_indent(self):
+        self.indent -= 4
+        if self.indent < 0:
+            self.indent = 0
+
+    def repr(self):
+        return "\n".join([r for r in self._repr if r])
 
 
 
