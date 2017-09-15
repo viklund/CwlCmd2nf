@@ -111,6 +111,8 @@ class Input(CWL):
         return repr
 
     def command_repr(self):
+        if self.type == 'File':
+            return "${{{}}}".format(self.name)
         return "${{{}}}".format(self.full_name())
 
     def channel_repr(self):
