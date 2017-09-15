@@ -67,7 +67,20 @@ class Process(CWL):
     def repr(self):
         repr = []
         for input in self.inputs:
-            repr.append(input.setup_repr())
+            if input.type == 'File':
+                continue
+            if input.required:
+                if hasattr(input, 'default'):
+                    repr.append(input.setup_repr())
+                else:
+                    repr.append("""
+if (!{}) {{
+    log.info("Missing parameter {}")
+    exit 1
+}}
+""".format(input.param_name(), input.full_name()))
+            else:
+                repr.append(input.setup_repr())
         repr.append("process {} {{".format(self.id))
 
         repr.append(self.container.repr())
@@ -81,25 +94,36 @@ class Process(CWL):
             repr.append( output.channel_repr() )
 
         repr.append('script:')
-        repr.append('"""')
-        repr.append( self.command_repr() )
-        repr.append('"""')
+        repr.append( self.build_script_string() )
         repr.append('}')
         return "\n".join([r for r in repr if r])
 
-    def command_repr(self):
-        repr = self.command.repr()
+    def build_script_string(self):
+        script = []
+
+        command = self.command.repr()
+        if command:
+            script.append(command)
         for argument in sorted(self.inputs, key=lambda x: x.position):
-            repr += " " + argument.command_repr()
-        return repr
+            if not argument.required:
+                script.append("( {} ? '{}' : '')".format(argument.param_name(), argument.command_repr()))
+            else:
+                script.append( " '{}'".format( argument.command_repr()) )
+        return " + ".join(script)
 
 
 
 class Input(CWL):
     def build(self):
+        self.required = True
         self.type = self.yaml['type']
+        if self.type[-1] == '?':
+            self.required = False
+            self.type = self.type[:-1]
+
         if 'default' in self.yaml:
             self.default = self.yaml['default']
+            self.required = True
 
         if 'inputBinding' in self.yaml:
             self.position = self.yaml['inputBinding']['position']
@@ -107,20 +131,26 @@ class Input(CWL):
         else:
             self.position = 0
 
-    def full_name(self):
-        name = super().full_name()
-        if self.type == 'File':
-            name = "{}_{}".format('inp', name)
-        else:
-            name = "params.{}".format(name)
-        return name
+        if 'secondaryFiles' in self.yaml:
+            self.secondary_files = self.yaml['secondaryFiles']
+
+    def channel_name(self):
+        return "{}_{}".format('inp', self.full_name())
+
+    def param_name(self):
+        return "param.{}".format(self.full_name())
 
     def setup_repr(self):
         if self.type == 'File':
             return
-        repr = self.full_name()
+        repr = self.param_name()
         if hasattr(self, 'default'):
-            repr += " = {}".format(self.default)
+            if self.type == 'string':
+                repr += " = '{}'".format(self.default)
+            elif self.type == 'int':
+                repr += " = {}".format(self.default)
+        else:
+            repr += " = ''"
         return repr
 
     def command_repr(self):
@@ -129,12 +159,12 @@ class Input(CWL):
             arg_name = self.arg_name + ' '
         if self.type == 'File':
             return "{}${{{}}}".format(arg_name, self.name)
-        return "{}${{{}}}".format(arg_name, self.full_name())
+        return "{}${{{}}}".format(arg_name, self.param_name())
 
     def channel_repr(self):
         if self.type != 'File':
             return
-        return "file {} from {}".format(self.name, self.full_name())
+        return "file {} from {}".format(self.name, self.channel_name())
 
 
 class Output(CWL):
@@ -166,7 +196,7 @@ class Converter(object):
             contents = "".join(fh.readlines())
             data = yaml.load(contents)
 
-        p = Process(data)
+        p = Process(data, name=file)
         print(p.repr())
 
 
